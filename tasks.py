@@ -8,6 +8,7 @@ from urllib import request
 
 from RPA.Browser.Selenium import Selenium
 from RPA.Excel.Files import Files
+from RPA.Robocorp.WorkItems import WorkItems
 from SeleniumLibrary.errors import ElementNotFound
 from dateutil.relativedelta import relativedelta
 from selenium.common import StaleElementReferenceException, ElementClickInterceptedException
@@ -72,14 +73,11 @@ class ArticleData:
         return str(self.to_dict())
 
 
-# wi = WorkItems()
-# wi.get_input_work_item()
-# SEARCH_PHRASE = wi.get_work_item_variable("search_phrase")
-# NEWS_CATEGORY = wi.get_work_item_variable("news_category")
-# NUMBER_OF_MONTHS = wi.get_work_item_variable("number_of_months")
-SEARCH_PHRASE = "brazil".lower()
-NEWS_CATEGORY = "world"
-NUMBER_OF_MONTHS = 1
+wi = WorkItems()
+wi.get_input_work_item()
+SEARCH_PHRASE = wi.get_work_item_variable("search_phrase").lower()
+NEWS_CATEGORY = wi.get_work_item_variable("news_category")
+NUMBER_OF_MONTHS = wi.get_work_item_variable("number_of_months")
 
 browser_lib = Selenium()
 
