@@ -1,67 +1,123 @@
 import re
 from datetime import datetime
+from urllib import request
 
 from RPA.Browser.Selenium import Selenium
+from RPA.Excel.Files import Files
 from SeleniumLibrary.errors import ElementNotFound
 from dateutil.relativedelta import relativedelta
 from selenium.common import StaleElementReferenceException, ElementClickInterceptedException
-from RPA.Excel.Files import Files
-import urllib.request
+from selenium.webdriver.remote.webelement import WebElement
 
-SEARCH_PHRASE = "brazil"
-NEWS_CATEGORY = "World"
+
+class ArticleData:
+    __money_regex = r"(\$)(([1-9]\d{0,2}(\,\d{3})*)|([1-9]\d*)|" \
+                    r"(0))(\.\d{2})?|\d+ (\bdollars\b|\busd\b|" \
+                    r"\bdollar\b)+"
+
+    def __init__(self, web_element: WebElement, search_phrase: str):
+        self.date = web_element.find_element(
+            by="xpath", value=".//span[@data-testid='todays-date']").text
+        self.title = web_element.find_element(by="xpath", value=".//h4").text
+        self.description = web_element.find_elements(
+            by="xpath",
+            value=".//p"
+        )[1].text
+        self.picture_url = web_element.find_element(
+            by="xpath",
+            value=".//img"
+        ).get_property("src").split('?')[0]
+
+        description_lower = self.description.lower()
+        title_lower = self.title.lower()
+
+        self.n_of_phrases = description_lower.count(search_phrase) + \
+                            title_lower.count(search_phrase)
+
+        self.has_money = bool(re.search(self.__money_regex, title_lower)) or bool(
+            re.search(self.__money_regex, description_lower))
+        self.url = web_element.find_element(
+            by="xpath",
+            value=".//a"
+        ).get_property("href").split('?')[0]
+
+    def to_dict(self):
+        return {
+            "date": self.date,
+            "title": self.title,
+            "description": self.description,
+            "picture_file_name": self.picture_url,
+            "n_of_phrases": self.n_of_phrases,
+            "has_money": self.has_money
+        }
+
+    def __str__(self):
+        return str(self.to_dict())
+
+    def __repr__(self):
+        return str(self.to_dict())
+
+
+# wi = WorkItems()
+# wi.get_input_work_item()
+# SEARCH_PHRASE = wi.get_work_item_variable("search_phrase")
+# NEWS_CATEGORY = wi.get_work_item_variable("news_category")
+# NUMBER_OF_MONTHS = wi.get_work_item_variable("number_of_months")
+SEARCH_PHRASE = "brazil".lower()
+NEWS_CATEGORY = "world"
 NUMBER_OF_MONTHS = 1
 
 browser_lib = Selenium()
 
 
-def open_the_website(url):
+def open_the_website(url: str) -> None:
     browser_lib.open_available_browser(url)
 
 
-def accept_cookies():
+def accept_cookies() -> None:
     try:
-        browser_lib.wait_until_element_is_visible('//button[@data-testid="GDPR-accept"]')
-        browser_lib.wait_and_click_button('//button[@data-testid="GDPR-accept"]')
-        browser_lib.wait_until_element_is_not_visible('//button[@data-testid="GDPR-accept"]')
+        accept_cookies_test_data_id = "//button[@data-testid='GDPR-accept']"
+        browser_lib.wait_until_element_is_visible(accept_cookies_test_data_id)
+        browser_lib.wait_and_click_button(accept_cookies_test_data_id)
+        browser_lib.wait_until_element_is_not_visible(accept_cookies_test_data_id)
         browser_lib.wait_until_element_is_not_visible('//div[@data-testid="response-snackbar"]')
-    except AssertionError as e:
-        if "still visible after 5 seconds." in e.args[0]:
+    except AssertionError as error:
+        if "still visible after 5 seconds." in error.args[0]:
             return
-    except Exception as e:
-        print(e)
-        return accept_cookies()
 
 
-def click_search_button():
+def click_search_button() -> None:
     data_test_id = "//button[@data-test-id='search-button']"
     browser_lib.click_button(data_test_id)
 
 
-def search_for(term):
+def search_for(term: str) -> None:
     data_test_id = "//input[@data-testid='search-input']"
     browser_lib.input_text(data_test_id, term)
 
 
-def submit_search():
+def submit_search() -> None:
     data_test_id = "//button[@data-test-id='search-submit']"
     browser_lib.click_button(data_test_id)
 
 
-def set_section(section):
-    section_selection_data_test_id = '//div[@data-testid="section"] //button[@data-testid="search-multiselect-button"]'
+def set_section(section: str) -> None:
+    section_selection_data_test_id = '//div[@data-testid="section"]' \
+                                     ' //button[@data-testid="search-multiselect-button"]'
     browser_lib.click_button(section_selection_data_test_id)
-    dropdown_data_test_id = "//div[@data-testid='section'] //ul[@data-testid='multi-select-dropdown-list'] //li //label[@data-testid='DropdownLabel']"
+    dropdown_data_test_id = "//div[@data-testid='section']" \
+                            " //ul[@data-testid='multi-select-dropdown-list']" \
+                            " //li //label[@data-testid='DropdownLabel']"
     labels = browser_lib.find_elements(dropdown_data_test_id)
-    d = {}
+    labels_dict = {}
     for label in labels:
         section_name = re.sub(r"[^A-Za-z.]", "", label.text).lower()
-        d[section_name] = label
+        labels_dict[section_name] = label
 
-    browser_lib.click_button(d[section.lower()])
+    browser_lib.click_button(labels_dict[section.lower()])
 
 
-def set_date_span(number_of_months):
+def set_date_span(number_of_months: int) -> None:
     today = datetime.today()
     today_date = today.strftime("%m/%d/%Y")
 
@@ -73,94 +129,70 @@ def set_date_span(number_of_months):
     date_range_data_test_id = "//button[@data-testid='search-date-dropdown-a']"
     browser_lib.click_button(date_range_data_test_id)
 
-    specific_date_value = "//button[@value='Specific Dates']"
-    browser_lib.click_button(specific_date_value)
-
-    start_date_data_test_id = "//input[@data-testid='DateRange-startDate']"
-    browser_lib.input_text(start_date_data_test_id, target_date)
-
-    end_date_data_test_id = "//input[@data-testid='DateRange-endDate']"
-    browser_lib.input_text(end_date_data_test_id, today_date)
+    browser_lib.click_button("//button[@value='Specific Dates']")
+    browser_lib.input_text("//input[@data-testid='DateRange-startDate']", target_date)
+    browser_lib.input_text("//input[@data-testid='DateRange-endDate']", today_date)
 
     browser_lib.click_button(date_range_data_test_id)
-    print(today_date, target_date)
 
 
-def get_article_data(web_element):
-    browser_lib.wait_until_page_contains_element(web_element)
-    date = web_element.find_element(by="xpath", value=".//span[@data-testid='todays-date']").text
-    title = web_element.find_element(by="xpath", value=".//h4").text
-    description = web_element.find_elements(by="xpath", value=".//p")[1].text
-    picture_file_name = web_element.find_element(by="xpath", value=".//img").get_property("src").split('?')[0]
-    n_of_phrases = description.lower().count(SEARCH_PHRASE.lower()) + title.lower().count(SEARCH_PHRASE.lower())
-    money_regex = r"(\$)(([1-9]\d{0,2}(\,\d{3})*)|([1-9]\d*)|(0))(\.\d{2})?|[0-9]+ (\bdollars\b|\busd\b|\bdollar\b)+"
-    has_money = bool(re.search(money_regex, title.lower())) or bool(
-        re.search(money_regex, description.lower()))
-    article_url = web_element.find_element(by="xpath", value=".//a").get_property("href").split('?')[0]
-    return {'date': date, 'title': title, 'description': description, 'picture_file_name': picture_file_name,
-            'url': article_url, 'number_of_phrase_occurrences': n_of_phrases,
-            'has_amount_of_money': has_money}
-
-
-def get_search_result():
+def get_articles_web_element() -> list[WebElement]:
     show_more_data_test_id = '//button[@data-testid="search-show-more-button"]'
-    d = {}
-    idx = 0
+
     while browser_lib.does_page_contain_element(show_more_data_test_id):
         try:
             browser_lib.press_key(show_more_data_test_id, key="end")
             browser_lib.find_element(show_more_data_test_id).click()
-        except ElementClickInterceptedException:
+        except ElementClickInterceptedException | StaleElementReferenceException:
             continue
         except ElementNotFound:
             break
 
-    search_result_data_test_id = '//ol[@data-testid="search-results"] //li[@data-testid="search-bodega-result"]'
-    search_result = browser_lib.find_elements(search_result_data_test_id)
+    return browser_lib.find_elements('//ol[@data-testid="search-results"] '
+                                     '//li[@data-testid="search-bodega-result"]')
 
-    while idx < len(search_result):
-        result = search_result[idx]
+
+def get_search_result_data(articles_web_element: list[WebElement]) -> list[ArticleData]:
+    article_dict = {}
+    idx = 0
+    while idx < len(articles_web_element):
+        web_element = articles_web_element[idx]
         try:
-            article_data = get_article_data(result)
-            # try:
-            #     if d[article_data['url']] is None:
-            #         idx += 1
-            #         continue
-            # except KeyError:
-            #     d[article_data['url']] = article_data
-            if article_data['url'] not in d.keys():
-                d[article_data['url']] = article_data
+            browser_lib.wait_until_page_contains_element(web_element)
+            article_data = ArticleData(web_element, SEARCH_PHRASE)
+            if article_data.url not in article_dict:
+                article_dict[article_data.url] = article_data
             idx += 1
         except StaleElementReferenceException:
-            search_result = browser_lib.find_elements(search_result_data_test_id)
+            articles_web_element = browser_lib.find_elements(
+                '//ol[@data-testid="search-results"] '
+                '//li[@data-testid="search-bodega-result"]')
 
-    return list(d.values())
+    return list(article_dict.values())
 
 
-def save_to_excel(result):
+def save_to_excel(articles: list[ArticleData]) -> None:
     lib = Files()
     lib.create_workbook("")
+    excel_file_path = "./result.xlsx"
+    content = [article.to_dict() for article in articles]
     try:
-        lib.open_workbook("./result.xlsx")
-        lib.append_rows_to_worksheet(content=result, header=True)
-        lib.save_workbook()
+        lib.open_workbook(excel_file_path)
     except FileNotFoundError:
-        lib.create_workbook("./result.xlsx")
+        lib.create_workbook(excel_file_path)
         lib.save_workbook()
-        lib.open_workbook("./result.xlsx")
-        lib.append_rows_to_worksheet(content=result, header=True)
-        lib.save_workbook()
+        lib.open_workbook(excel_file_path)
     finally:
+        lib.append_rows_to_worksheet(content=content, header=True)
+        lib.save_workbook()
         lib.close_workbook()
 
 
-def get_images(search_result):
-    for result in search_result:
-        file_name = result['picture_file_name'].split('/')[-1]
-        urllib.request.urlretrieve(result['picture_file_name'], file_name)
-        result['picture_file_name'] = file_name
-        result.pop('url')
-
+def get_images(articles: list[ArticleData]) -> None:
+    for article in articles:
+        file_name = article.picture_url.split('/')[-1]
+        request.urlretrieve(article.picture_url, file_name)
+        article.picture_url = file_name
 
 
 def main():
@@ -173,11 +205,12 @@ def main():
         set_section(NEWS_CATEGORY)
         set_date_span(NUMBER_OF_MONTHS)
         browser_lib.wait_until_page_contains(SEARCH_PHRASE)
-        search_result = get_search_result()
-        get_images(search_result)
-        save_to_excel(search_result)
-        print(len(search_result))
-        print(search_result)
+        articles_web_element = get_articles_web_element()
+        articles_data = get_search_result_data(articles_web_element)
+        get_images(articles_data)
+        save_to_excel(articles_data)
+        print(len(articles_data))
+        print(articles_data)
     finally:
         browser_lib.close_all_browsers()
 
