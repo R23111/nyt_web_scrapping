@@ -1,3 +1,7 @@
+"""
+Script to get New York Times articles from a search within a date range, and a section type
+"""
+
 import re
 from datetime import datetime
 from urllib import request
@@ -11,11 +15,18 @@ from selenium.webdriver.remote.webelement import WebElement
 
 
 class ArticleData:
+    """
+    Article data from the web page.
+    """
     __money_regex = r"(\$)(([1-9]\d{0,2}(\,\d{3})*)|([1-9]\d*)|" \
                     r"(0))(\.\d{2})?|\d+ (\bdollars\b|\busd\b|" \
                     r"\bdollar\b)+"
 
-    def __init__(self, web_element: WebElement, search_phrase: str):
+    def __init__(self, web_element: WebElement, search_phrase: str) -> None:
+        """
+        :param web_element: WebElement of the article
+        :param search_phrase: The phrase used to search
+        """
         self.date = web_element.find_element(
             by="xpath", value=".//span[@data-testid='todays-date']").text
         self.title = web_element.find_element(by="xpath", value=".//h4").text
@@ -41,7 +52,10 @@ class ArticleData:
             value=".//a"
         ).get_property("href").split('?')[0]
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
+        """
+        :return: dictionary of the article data
+        """
         return {
             "date": self.date,
             "title": self.title,
@@ -71,10 +85,17 @@ browser_lib = Selenium()
 
 
 def open_the_website(url: str) -> None:
+    """
+    Open the website on the given url
+    :param url: site url
+    """
     browser_lib.open_available_browser(url)
 
 
 def accept_cookies() -> None:
+    """
+    Accept cookies
+    """
     try:
         accept_cookies_test_data_id = "//button[@data-testid='GDPR-accept']"
         browser_lib.wait_until_element_is_visible(accept_cookies_test_data_id)
@@ -87,21 +108,36 @@ def accept_cookies() -> None:
 
 
 def click_search_button() -> None:
+    """
+    Click the search button
+    """
     data_test_id = "//button[@data-test-id='search-button']"
     browser_lib.click_button(data_test_id)
 
 
 def search_for(term: str) -> None:
+    """
+    Search for the given term
+    :param term: phrase to be searched
+    """
     data_test_id = "//input[@data-testid='search-input']"
     browser_lib.input_text(data_test_id, term)
 
 
 def submit_search() -> None:
+    """
+    Submits the search
+    :return:
+    """
     data_test_id = "//button[@data-test-id='search-submit']"
     browser_lib.click_button(data_test_id)
 
 
 def set_section(section: str) -> None:
+    """
+    Select the news section to filter the search result
+    :param section: news section to be selected
+    """
     section_selection_data_test_id = '//div[@data-testid="section"]' \
                                      ' //button[@data-testid="search-multiselect-button"]'
     browser_lib.click_button(section_selection_data_test_id)
@@ -118,6 +154,12 @@ def set_section(section: str) -> None:
 
 
 def set_date_span(number_of_months: int) -> None:
+    """
+    Set the date span to filter the search result
+    :param number_of_months: number of months including the current one
+    """
+    number_of_months = max(number_of_months, 0)
+
     today = datetime.today()
     today_date = today.strftime("%m/%d/%Y")
 
@@ -137,13 +179,17 @@ def set_date_span(number_of_months: int) -> None:
 
 
 def get_articles_web_element() -> list[WebElement]:
+    """
+    Loads the articles from the search result and store them in a list of web elements
+    :return: list of found web elements to the corresponding articles
+    """
     show_more_data_test_id = '//button[@data-testid="search-show-more-button"]'
 
     while browser_lib.does_page_contain_element(show_more_data_test_id):
         try:
             browser_lib.press_key(show_more_data_test_id, key="end")
             browser_lib.find_element(show_more_data_test_id).click()
-        except ElementClickInterceptedException | StaleElementReferenceException:
+        except (ElementClickInterceptedException, StaleElementReferenceException):
             continue
         except ElementNotFound:
             break
@@ -152,7 +198,12 @@ def get_articles_web_element() -> list[WebElement]:
                                      '//li[@data-testid="search-bodega-result"]')
 
 
-def get_search_result_data(articles_web_element: list[WebElement]) -> list[ArticleData]:
+def get_articles_data(articles_web_element: list[WebElement]) -> list[ArticleData]:
+    """
+    Loads the articles from the search result web element and store them in a list of ArticleData
+    :param articles_web_element:
+    :return:
+    """
     article_dict = {}
     idx = 0
     while idx < len(articles_web_element):
@@ -172,6 +223,10 @@ def get_search_result_data(articles_web_element: list[WebElement]) -> list[Artic
 
 
 def save_to_excel(articles: list[ArticleData]) -> None:
+    """
+    Save the articles to excel, creating the file if it doesn't exist, and appending data if it does
+    :param articles: list of articles to be saved
+    """
     lib = Files()
     lib.create_workbook("")
     excel_file_path = "./result.xlsx"
@@ -189,6 +244,10 @@ def save_to_excel(articles: list[ArticleData]) -> None:
 
 
 def get_images(articles: list[ArticleData]) -> None:
+    """
+    Download the images of the articles
+    :param articles: list of Articles to have the image downloaded
+    """
     for article in articles:
         file_name = article.picture_url.split('/')[-1]
         request.urlretrieve(article.picture_url, file_name)
@@ -206,7 +265,7 @@ def main():
         set_date_span(NUMBER_OF_MONTHS)
         browser_lib.wait_until_page_contains(SEARCH_PHRASE)
         articles_web_element = get_articles_web_element()
-        articles_data = get_search_result_data(articles_web_element)
+        articles_data = get_articles_data(articles_web_element)
         get_images(articles_data)
         save_to_excel(articles_data)
         print(len(articles_data))
